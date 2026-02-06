@@ -19,6 +19,29 @@ ORG="${GITHUB_ORG:-qb-group}"
 PROJECT_NUM="${GITHUB_PROJECT_ID:-3}"
 STATUS="${GITHUB_PROJECT_STATUS:-In progress}"
 
+# 프로젝트 제목 가져오기 (파일명 생성용)
+echo "Fetching project title..." >&2
+project_title=$(gh api graphql -f query='
+{
+  organization(login: "'"$ORG"'") {
+    projectV2(number: '"$PROJECT_NUM"') {
+      title
+    }
+  }
+}' | jq -r '.data.organization.projectV2.title')
+
+# 현재 날짜 (yyyy-MM-dd)
+current_date=$(date +%Y-%m-%d)
+
+# 출력 파일명 생성 (TypeScript 코드와 동일한 형식)
+OUTPUT_DIR="$SCRIPT_DIR/../output"
+OUTPUT_FILE="$OUTPUT_DIR/${project_title}_${STATUS}_${current_date}.md"
+
+# output 디렉토리 생성
+mkdir -p "$OUTPUT_DIR"
+
+echo "Output file: $OUTPUT_FILE" >&2
+
 # GraphQL로 모든 이슈 조회 (페이지네이션 처리)
 all_items="[]"
 has_next_page=true
@@ -110,61 +133,74 @@ echo "" >&2
 # all_items는 이미 필터링된 상태
 filtered="$all_items"
 
-# Markdown 테이블 헤더 출력
-echo "| # | 구분 | 이슈 | FE | BE | Desc |"
-echo "|---|------|------|:--:|:--:|------|"
+# Markdown 출력 함수
+generate_markdown() {
+  # Markdown 테이블 헤더 출력
+  echo "| # | 구분 | 이슈 | FE | BE | Desc |"
+  echo "|---|------|------|:--:|:--:|------|"
 
-# 구분자 상태 추적
-category=""
-count=0
+  # 구분자 상태 추적
+  category=""
+  count=0
 
-# 각 항목 처리
-echo "$filtered" | jq -c '.[]' | while read -r item; do
-  title=$(echo "$item" | jq -r '.title')
-  url=$(echo "$item" | jq -r '.url')
-  state=$(echo "$item" | jq -r '.state')
-  fe=$(echo "$item" | jq -r '.FE')
-  be=$(echo "$item" | jq -r '.BE')
-  desc=$(echo "$item" | jq -r '.Desc')
+  # 각 항목 처리
+  echo "$filtered" | jq -c '.[]' | while read -r item; do
+    title=$(echo "$item" | jq -r '.title')
+    url=$(echo "$item" | jq -r '.url')
+    state=$(echo "$item" | jq -r '.state')
+    fe=$(echo "$item" | jq -r '.FE')
+    be=$(echo "$item" | jq -r '.BE')
+    desc=$(echo "$item" | jq -r '.Desc')
 
-  # 구분자 확인
-  if [[ "$title" == *"이하 스프린트 연속"* ]]; then
-    category="연속"
-    continue
-  elif [[ "$title" == *"이하 신규"* ]]; then
-    category="신규"
-    continue
-  elif [[ "$title" == *"이하 기술 부채"* ]]; then
-    category="부채"
-    continue
-  fi
+    # 구분자 확인
+    if [[ "$title" == *"이하 스프린트 연속"* ]]; then
+      category="연속"
+      continue
+    elif [[ "$title" == *"이하 신규"* ]]; then
+      category="신규"
+      continue
+    elif [[ "$title" == *"이하 기술 부채"* ]]; then
+      category="부채"
+      continue
+    fi
 
-  # DraftIssue(구분자) 제외 (url이 null인 경우)
-  if [[ "$url" == "null" ]]; then
-    continue
-  fi
+    # DraftIssue(구분자) 제외 (url이 null인 경우)
+    if [[ "$url" == "null" ]]; then
+      continue
+    fi
 
-  # 카운터 증가
-  ((count++))
+    # 카운터 증가
+    ((count++))
 
-  # FE, BE 값 처리 (null이면 "-"로 표시)
-  [[ "$fe" == "null" ]] && fe="-"
-  [[ "$be" == "null" ]] && be="-"
-  [[ "$desc" == "null" ]] && desc="-"
+    # FE, BE 값 처리 (null이면 "-"로 표시)
+    [[ "$fe" == "null" ]] && fe="-"
+    [[ "$be" == "null" ]] && be="-"
+    [[ "$desc" == "null" ]] && desc="-"
 
-  # Markdown 테이블 행 출력
-  echo "| $count | $category | [$title]($url) | $fe | $be | $desc |"
-done
+    # Markdown 테이블 행 출력
+    echo "| $count | $category | [$title]($url) | $fe | $be | $desc |"
+  done
 
-# FE, BE 합계 계산 (구분자 제외, 나머지는 이미 필터링됨)
-totals=$(echo "$filtered" | jq '[.[] | select(.title | test("이하 스프린트 연속|이하 신규|이하 기술 부채") | not)] | {
-  count: length,
-  fe_total: (map(.FE // 0) | add),
-  be_total: (map(.BE // 0) | add)
-}')
+  # FE, BE 합계 계산 (구분자 제외, 나머지는 이미 필터링됨)
+  totals=$(echo "$filtered" | jq '[.[] | select(.title | test("이하 스프린트 연속|이하 신규|이하 기술 부채") | not)] | {
+    count: length,
+    fe_total: (map(.FE // 0) | add),
+    be_total: (map(.BE // 0) | add)
+  }')
 
-fe_total=$(echo "$totals" | jq -r '.fe_total')
-be_total=$(echo "$totals" | jq -r '.be_total')
+  fe_total=$(echo "$totals" | jq -r '.fe_total')
+  be_total=$(echo "$totals" | jq -r '.be_total')
 
-# 합계 행 출력
-echo "| | **Total** | | **$fe_total** | **$be_total** | |"
+  # 합계 행 출력
+  echo "| | **Total** | | **$fe_total** | **$be_total** | |"
+}
+
+# Markdown 생성 및 저장
+markdown_output=$(generate_markdown)
+
+# 파일에 저장
+echo "$markdown_output" > "$OUTPUT_FILE"
+echo "Markdown saved to: $OUTPUT_FILE" >&2
+
+# stdout에도 출력 (backward compatibility)
+echo "$markdown_output"
