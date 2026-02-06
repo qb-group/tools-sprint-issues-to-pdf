@@ -35,7 +35,7 @@
     - primer is systematically designed for GitHub
 
 
-- [pnpm](https://pnpm.io/) 또는 [yarn](https://yarnpkg.com/): node package manager
+- [pnpm](https://pnpm.io/): node package manager
 
 ### Development
 : set github token in `.env`
@@ -79,15 +79,11 @@
 - Installation
   ```bash
   $ pnpm install
-  # or
-  $ yarn install
   ```
 
 - Run
   ```bash
   $ pnpm start
-  # or
-  $ yarn start
   ```
 
 - Result
