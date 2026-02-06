@@ -47,6 +47,9 @@ export interface GITHUB_ISSUE {
   repoNameWithOwner?: string;
   author?: string;
   createdAt?: string;
+  desc?: string;                    // project desc field
+  fe?: number;                      // project FE field
+  be?: number;                      // project BE field
 };
 
 /**
@@ -81,7 +84,7 @@ const getProjects = async (orglogin: string): Promise<any> => {
   return projects;
 };
 
-const getColumns = (): string[] => {
+export const getColumns = (): string[] => {
   return _.split(GITHUB_PROJECT_STATUS, ',').map((status) => _.trim(status));
 }
 
@@ -216,7 +219,10 @@ export const getProjectIssues = async (): Promise<GITHUB_ISSUE[]> => {
         url: item.content?.url,
         repoNameWithOwner: item.content?.repository?.nameWithOwner,
         author: item.content?.author?.login,
-        createdAt: item.content?.createdAt
+        createdAt: item.content?.createdAt,
+        desc: item.desc?.text,
+        fe: item.fe?.number,
+        be: item.be?.number
       }
       result.push(issue);
     }
@@ -237,4 +243,23 @@ export const getProjectIssues = async (): Promise<GITHUB_ISSUE[]> => {
 
   // console.log('[getProjectIssues] result:', issues);
   return issues;
+};
+
+/**
+ * Get raw project items for markdown generation (includes DraftIssues)
+ * @returns raw items filtered by status and closed state
+ */
+export const getProjectItemsForMarkdown = async (): Promise<any[]> => {
+  const orglogin: string = GITHUB_ORG;
+  const projectid: number = GITHUB_PROJECT_ID;
+  const FILTER_COLUMNS: string[] = getColumns();
+
+  const items = await getProjectItems(orglogin, projectid);
+
+  // Include both Issues and DraftIssues, filter by status and closed state
+  return items.filter((item: any) => {
+    const status = item.fieldValueByName?.name;
+    const isClosed = item.content?.state === 'CLOSED';
+    return FILTER_COLUMNS.includes(status) && !isClosed;
+  });
 };

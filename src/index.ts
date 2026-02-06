@@ -1,9 +1,10 @@
 import * as _ from 'lodash';
 import ora from 'ora';
 import { consola } from "consola";
-import { GITHUB_PROJECT, getProjectIssues, getProjectInfo } from './github';
+import { GITHUB_PROJECT, getProjectIssues, getProjectInfo, getProjectItemsForMarkdown } from './github';
 // import GithubMockupJson from '../github-response-mockup/multiple-status-issues.json';
 import { generatePdf } from './pdf';
+import { generateMarkdown } from './markdown';
 
 (async () => {
 
@@ -35,17 +36,28 @@ import { generatePdf } from './pdf';
 
   if (answer) {
     spinner.start('Loading github issues');
-    const issues = await getProjectIssues();
+    const [issues, markdownItems] = await Promise.all([
+      getProjectIssues(),              // For PDF
+      getProjectItemsForMarkdown()     // For markdown (includes DraftIssues)
+    ]);
     spinner.succeed('Load github issues done!');
     // console.log(JSON.stringify(issues));
 
-    spinner.start('Generating PDF');
-    const results: string[] = await generatePdf(projectInfo, issues);
-    // const results: string[] = await generatePdf(projectInfo, GithubMockupJson);
-    spinner.succeed(`Generated PDF!`);
+    spinner.start('Generating outputs');
+    const [pdfResults, markdownResults] = await Promise.all([
+      generatePdf(projectInfo, issues),
+      generateMarkdown(projectInfo, markdownItems)
+    ]);
+    spinner.succeed('Generated outputs!');
 
-    for (const item of results) {
-      consola.info(item);
+    consola.info('PDF files:');
+    for (const item of pdfResults) {
+      consola.info(`  ${item}`);
+    }
+
+    consola.info('Markdown files:');
+    for (const item of markdownResults) {
+      consola.info(`  ${item}`);
     }
   }
 })();

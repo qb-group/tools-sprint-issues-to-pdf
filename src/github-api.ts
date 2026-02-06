@@ -104,6 +104,21 @@ const QUERY_PROJECT_ITEMS = `
                 name
               }
             }
+            desc: fieldValueByName(name: "Desc") {
+              ... on ProjectV2ItemFieldTextValue {
+                text
+              }
+            }
+            fe: fieldValueByName(name: "FE") {
+              ... on ProjectV2ItemFieldNumberValue {
+                number
+              }
+            }
+            be: fieldValueByName(name: "BE") {
+              ... on ProjectV2ItemFieldNumberValue {
+                number
+              }
+            }
             fieldValues(last: 20) {
               nodes {
                 ... on ProjectV2ItemFieldNumberValue {
@@ -135,9 +150,11 @@ const QUERY_PROJECT_ITEMS = `
                   login
                 }
                 number
+                title
                 titleHTML
                 bodyHTML
                 url
+                state
                 createdAt
                 labels(last: 10) {
                   nodes {
@@ -145,6 +162,9 @@ const QUERY_PROJECT_ITEMS = `
                     color
                   }
                 }
+              }
+              ...on DraftIssue {
+                title
               }
             }
           }

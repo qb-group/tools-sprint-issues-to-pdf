@@ -3,14 +3,14 @@
 ## Project Overview
 
 This tool fetches issues from GitHub Projects (v2) and generates reports:
-- TypeScript app: PDF generation (`src/`)
-- Bash scripts: Markdown reports (`scripts/`)
+- TypeScript app: Both PDF and Markdown generation (`src/`)
+- Unified data fetching: Single GraphQL query for both outputs (optimized performance)
 
 ## Environment Setup
 
 - `.env` file required - contains `GITHUB_TOKEN`, `GITHUB_ORG`, `GITHUB_PROJECT_ID`, `GITHUB_PROJECT_STATUS`
-- Scripts use `gh` CLI (GitHub CLI) + `jq` for JSON processing
 - PDF generation uses `puppeteer` with Chrome at `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
+- All data fetching done via `@octokit/graphql` in TypeScript
 
 ## GitHub GraphQL Patterns
 
@@ -23,34 +23,57 @@ This tool fetches issues from GitHub Projects (v2) and generates reports:
 - This project uses custom ProjectV2 fields: `FE` (number), `BE` (number), `Desc` (text), `Status` (single select)
 - Access via `fieldValueByName(name: "FieldName")` with type-specific fragments
 - Example: `... on ProjectV2ItemFieldNumberValue { number }`
+- Query includes direct field access: `fe: fieldValueByName(name: "FE")`, `be: fieldValueByName(name: "BE")`, `desc: fieldValueByName(name: "Desc")`
 
 ### Issue vs DraftIssue
-- Regular issues have `url` field
-- DraftIssues (no `url`) are used as category separators in this project
+- Regular issues have `url` and `state` fields
+- DraftIssues (no `url`) are used as category separators in markdown output
 - Pattern: titles like "이하 스프린트 연속", "이하 신규", "이하 기술 부채"
+- GraphQL query includes both: `... on Issue { ... }` and `... on DraftIssue { title }`
 
 ## Performance Optimization
 
+### Single Data Fetch Pattern
+- **Old approach**: Bash script + TypeScript app = 2 separate API calls
+- **New approach**: Single GraphQL fetch → parallel markdown + PDF generation
+- Eliminates ~50% API call overhead
+- Uses `Promise.all()` for parallel output generation
+
 ### Filter Early Pattern
-- **Bad**: Fetch all items → filter in bash loops
-- **Good**: Filter during GraphQL fetch → store only matches
-- Example: `select(.fieldValueByName.name == $status and .content.state != "CLOSED")`
-- This reduced memory 96.8% (909 → 29 items) in `sprint-current.sh`
+- Filter items during data processing, not in loops
+- For PDF: Filter out DraftIssues and closed issues in `getProjectIssues()`
+- For Markdown: Keep DraftIssues (category separators), exclude closed in `getProjectItemsForMarkdown()`
 
-## Scripts
+## Code Organization
 
-### sprint-current.sh
-- Generates markdown table of current sprint issues
-- Uses stderr for progress logging (`>&2`)
-- Pagination loop: fetch → filter → accumulate → repeat
-- Category tracking via DraftIssue separators
-- Total calculation excludes separator items
+### src/github-api.ts
+- GraphQL queries and client configuration
+- Single unified query includes: FE, BE, Desc fields + Issue/DraftIssue content
+
+### src/github.ts
+- `getProjectIssues()`: Returns filtered issues for PDF (excludes DraftIssues)
+- `getProjectItemsForMarkdown()`: Returns raw items for markdown (includes DraftIssues)
+- Both use same underlying `getProjectItems()` with pagination
+
+### src/markdown.ts
+- `generateMarkdown()`: Orchestrates markdown generation per status column
+- `generateMarkdownTable()`: Formats markdown table with category tracking
+- Category detection from DraftIssue titles: "이하 스프린트 연속" → "연속", etc.
+- Outputs: `output/{title}_{status}_{date}.md`
+- Number formatting: integers show as `1.0`, decimals as `1.5`
+
+### src/pdf.ts
+- PDF generation from issue data (unchanged)
+
+### src/index.ts
+- Parallel execution: `Promise.all([getProjectIssues(), getProjectItemsForMarkdown()])`
+- Parallel output: `Promise.all([generatePdf(), generateMarkdown()])`
 
 ## Testing
 
 - Use `test/github-graphql.rest` with VSCode REST Client for API testing
-- Script output: `./scripts/sprint-current.sh` to see results
-- Full pipeline: `pnpm start` (runs script + PDF generation)
+- Full pipeline: `yarn start` or `pnpm start` (generates both markdown + PDF)
+- Output files in `output/` directory: `.md` and `.pdf` files
 
 ## Common Issues
 
