@@ -19,58 +19,96 @@ ORG="${GITHUB_ORG:-qb-group}"
 PROJECT_NUM="${GITHUB_PROJECT_ID:-3}"
 STATUS="${GITHUB_PROJECT_STATUS:-In progress}"
 
-# GraphQL로 In Progress 이슈 조회
-items=$(gh api graphql -f query='
-{
-  organization(login: "'"$ORG"'") {
-    projectV2(number: '"$PROJECT_NUM"') {
-      items(first: 100) {
-        nodes {
-          fieldValueByName(name: "Status") {
-            ... on ProjectV2ItemFieldSingleSelectValue {
-              name
-            }
+# GraphQL로 모든 이슈 조회 (페이지네이션 처리)
+all_items="[]"
+has_next_page=true
+end_cursor=""
+
+echo "Fetching project items..." >&2
+
+while [[ "$has_next_page" == "true" ]]; do
+  if [[ -z "$end_cursor" ]]; then
+    cursor_param=""
+  else
+    cursor_param=", after: \"$end_cursor\""
+  fi
+
+  page_result=$(gh api graphql -f query='
+  {
+    organization(login: "'"$ORG"'") {
+      projectV2(number: '"$PROJECT_NUM"') {
+        items(first: 100'"$cursor_param"') {
+          pageInfo {
+            hasNextPage
+            endCursor
           }
-          fe: fieldValueByName(name: "FE") {
-            ... on ProjectV2ItemFieldNumberValue {
-              number
+          nodes {
+            fieldValueByName(name: "Status") {
+              ... on ProjectV2ItemFieldSingleSelectValue {
+                name
+              }
             }
-          }
-          be: fieldValueByName(name: "BE") {
-            ... on ProjectV2ItemFieldNumberValue {
-              number
+            fe: fieldValueByName(name: "FE") {
+              ... on ProjectV2ItemFieldNumberValue {
+                number
+              }
             }
-          }
-          desc: fieldValueByName(name: "Desc") {
-            ... on ProjectV2ItemFieldTextValue {
-              text
+            be: fieldValueByName(name: "BE") {
+              ... on ProjectV2ItemFieldNumberValue {
+                number
+              }
             }
-          }
-          content {
-            ... on Issue {
-              title
-              url
-              state
+            desc: fieldValueByName(name: "Desc") {
+              ... on ProjectV2ItemFieldTextValue {
+                text
+              }
             }
-            ... on DraftIssue {
-              title
+            content {
+              ... on Issue {
+                title
+                url
+                state
+              }
+              ... on DraftIssue {
+                title
+              }
             }
           }
         }
       }
     }
-  }
-}')
+  }')
 
-# jq로 Status 항목만 필터링하고 JSON 배열로 변환
-filtered=$(echo "$items" | jq --arg status "$STATUS" '[.data.organization.projectV2.items.nodes[] | select(.fieldValueByName.name == $status) | {
-  title: .content.title,
-  url: .content.url,
-  state: .content.state,
-  FE: .fe.number,
-  BE: .be.number,
-  Desc: .desc.text
-}]')
+  # 현재 페이지의 items 중 매칭되는 것만 필터링하여 추가
+  # 구분자(DraftIssue)는 url이 null이지만 포함해야 함
+  page_items=$(echo "$page_result" | jq --arg status "$STATUS" '
+    [.data.organization.projectV2.items.nodes[] |
+     select(.fieldValueByName.name == $status and
+            (.content.state != "CLOSED" or .content.state == null)) | {
+      title: .content.title,
+      url: .content.url,
+      state: .content.state,
+      FE: .fe.number,
+      BE: .be.number,
+      Desc: .desc.text
+    }]
+  ')
+
+  all_items=$(echo "$all_items" | jq ". + $page_items")
+
+  # 다음 페이지 정보 확인
+  has_next_page=$(echo "$page_result" | jq -r '.data.organization.projectV2.items.pageInfo.hasNextPage')
+  end_cursor=$(echo "$page_result" | jq -r '.data.organization.projectV2.items.pageInfo.endCursor')
+
+  page_count=$(echo "$page_items" | jq 'length')
+  echo "  Fetched page, matched $page_count items, total matched: $(echo "$all_items" | jq 'length')" >&2
+done
+
+echo "Total matched items: $(echo "$all_items" | jq 'length')" >&2
+echo "" >&2
+
+# all_items는 이미 필터링된 상태
+filtered="$all_items"
 
 # Markdown 테이블 헤더 출력
 echo "| # | 구분 | 이슈 | FE | BE | Desc |"
@@ -101,12 +139,7 @@ echo "$filtered" | jq -c '.[]' | while read -r item; do
     continue
   fi
 
-  # Closed 이슈 제외
-  if [[ "$state" == "CLOSED" ]]; then
-    continue
-  fi
-
-  # DraftIssue 제외 (url이 null인 경우)
+  # DraftIssue(구분자) 제외 (url이 null인 경우)
   if [[ "$url" == "null" ]]; then
     continue
   fi
@@ -123,8 +156,8 @@ echo "$filtered" | jq -c '.[]' | while read -r item; do
   echo "| $count | $category | [$title]($url) | $fe | $be | $desc |"
 done
 
-# FE, BE 합계 계산 (유효한 이슈만: url != null, state == OPEN, 구분자 제외)
-totals=$(echo "$filtered" | jq '[.[] | select(.url != null and .state == "OPEN" and (.title | test("이하 스프린트 연속|이하 신규|이하 기술 부채") | not))] | {
+# FE, BE 합계 계산 (구분자 제외, 나머지는 이미 필터링됨)
+totals=$(echo "$filtered" | jq '[.[] | select(.title | test("이하 스프린트 연속|이하 신규|이하 기술 부채") | not)] | {
   count: length,
   fe_total: (map(.FE // 0) | add),
   be_total: (map(.BE // 0) | add)
