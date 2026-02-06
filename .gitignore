@@ -112,3 +112,6 @@ output
 
 # github mockup 
 github-response-mockup
+
+# claude
+.claude/
