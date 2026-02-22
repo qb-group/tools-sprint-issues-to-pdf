@@ -39,9 +39,7 @@ export const generateMarkdown = async (
 
     // Generate filename matching PDF naming convention
     const currentDate = new Date().toISOString().split('T')[0]; // yyyy-MM-dd
-    const sanitizedStatus = status.replace(/\s+/g, '_');
-    const sanitizedTitle = projectInfo.title.replace(/\s+/g, '_');
-    const filename = `${sanitizedTitle}_${sanitizedStatus}_${currentDate}.md`;
+    const filename = `${projectInfo.title}_${status}_${currentDate}.md`;
     const filepath = path.join(outputDir, filename);
 
     // Write to file
