@@ -115,3 +115,6 @@ github-response-mockup
 
 # claude
 .claude/
+
+# OneDrive token cache
+.onedrive-token.json

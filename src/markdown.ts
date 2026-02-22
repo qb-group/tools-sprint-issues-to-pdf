@@ -11,17 +11,23 @@ interface MarkdownItem {
   desc: string | null;
 }
 
+export interface MarkdownResult {
+  filepath: string;
+  content: string;
+  status: string;
+}
+
 /**
  * Generate markdown tables for each status column
  * @param projectInfo project information
  * @param items raw project items (includes DraftIssues)
- * @returns array of generated file paths
+ * @returns array of generated file info (path, content, status)
  */
 export const generateMarkdown = async (
   projectInfo: GITHUB_PROJECT,
   items: any[]
-): Promise<string[]> => {
-  const results: string[] = [];
+): Promise<MarkdownResult[]> => {
+  const results: MarkdownResult[] = [];
   const outputDir = path.join(process.cwd(), 'output');
 
   // Create output directory if it doesn't exist
@@ -46,7 +52,7 @@ export const generateMarkdown = async (
 
     // Write to file
     fs.writeFileSync(filepath, markdown, 'utf-8');
-    results.push(filepath);
+    results.push({ filepath, content: markdown, status });
   }
 
   return results;
