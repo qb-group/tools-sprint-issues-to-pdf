@@ -1,46 +1,17 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import axios from 'axios';
-import { DeviceCodeCredential } from '@azure/identity';
+import { ClientSecretCredential } from '@azure/identity';
 import { MarkdownResult } from './markdown';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
-const TOKEN_CACHE_PATH = path.join(process.cwd(), '.onedrive-token.json');
-
-interface CachedToken {
-  token: string;
-  expiresAt: number;
-}
-
-function loadCachedToken(): string | null {
-  try {
-    if (fs.existsSync(TOKEN_CACHE_PATH)) {
-      const cache: CachedToken = JSON.parse(fs.readFileSync(TOKEN_CACHE_PATH, 'utf-8'));
-      if (cache.expiresAt > Date.now() + 60_000) return cache.token;
-    }
-  } catch {}
-  return null;
-}
-
-function saveCachedToken(token: string, expiresAt: number): void {
-  fs.writeFileSync(TOKEN_CACHE_PATH, JSON.stringify({ token, expiresAt }), 'utf-8');
-}
 
 async function getAccessToken(): Promise<string> {
-  const cached = loadCachedToken();
-  if (cached) return cached;
-
-  const credential = new DeviceCodeCredential({
-    tenantId: process.env.AZURE_TENANT_ID ?? 'organizations',
-    clientId: process.env.AZURE_CLIENT_ID!,
-    userPromptCallback: (info) => {
-      console.log('\n' + info.message);
-    },
-  });
-
+  const credential = new ClientSecretCredential(
+    process.env.AZURE_TENANT_ID!,
+    process.env.AZURE_CLIENT_ID!,
+    process.env.AZURE_CLIENT_SECRET!,
+  );
   const tokenResult = await credential.getToken('https://graph.microsoft.com/.default');
   if (!tokenResult) throw new Error('Failed to acquire access token');
-  saveCachedToken(tokenResult.token, tokenResult.expiresOnTimestamp);
   return tokenResult.token;
 }
 
@@ -76,15 +47,13 @@ function isSeparatorRow(cells: string[]): boolean {
 }
 
 function stripMarkdown(cell: string): string {
-  // Strip bold markers and extract link text from [text](url)
-  const linkMatch = cell.match(/^\[(.+?)\]\(.+?\)$/);
-  if (linkMatch) return linkMatch[1];
+  const linkMatch = cell.match(/^\[(.+?)\]\((.+?)\)$/);
+  if (linkMatch) return `=HYPERLINK("${linkMatch[2]}","${linkMatch[1]}")`;
   return cell.replace(/\*\*/g, '');
 }
 
-function markdownToRows(content: string, status: string): (string | number)[][] {
+function markdownToRows(content: string, startRow: number): (string | number)[][] {
   const rows: (string | number)[][] = [];
-  rows.push([status]); // Section header
 
   for (const line of content.split('\n')) {
     if (!line.startsWith('|')) continue;
@@ -93,6 +62,7 @@ function markdownToRows(content: string, status: string): (string | number)[][] 
       .slice(1, -1)
       .map((c) => c.trim());
     if (isSeparatorRow(cells)) continue;
+    if (cells.some((c) => c.includes('**Total**'))) continue; // replaced by SUM formula below
 
     const row: (string | number)[] = cells.map((cell) => {
       const text = stripMarkdown(cell);
@@ -102,6 +72,10 @@ function markdownToRows(content: string, status: string): (string | number)[][] 
     rows.push(row);
   }
 
+  // rows[0] = header, rows[1..] = data rows
+  const dataStart = startRow + 1;
+  const dataEnd = startRow + rows.length - 1;
+  rows.push(['', 'Total', '', `=SUM(D${dataStart}:D${dataEnd})`, `=SUM(E${dataStart}:E${dataEnd})`, '']);
   rows.push([]); // Empty row between sections
   return rows;
 }
@@ -133,7 +107,7 @@ async function writeWorksheet(
     return r;
   });
 
-  await axios.patch(`${base}/range(address='${range}')`, { values: padded }, { headers });
+  await axios.patch(`${base}/range(address='${range}')`, { formulas: padded }, { headers });
 }
 
 /**
@@ -146,12 +120,20 @@ export async function uploadToOneDriveExcel(markdownFiles: MarkdownResult[]): Pr
   const token = await getAccessToken();
   const { driveId, itemId } = await resolveShareLink(shareUrl, token);
 
-  const sheetName = new Date().toISOString().split('T')[0]; // yyyy-MM-dd
+  const sheetName = markdownFiles[0]?.sheetName ?? (() => {
+    const today = new Date();
+    return String(today.getFullYear()).slice(2) +
+      String(today.getMonth() + 1).padStart(2, '0') +
+      String(today.getDate()).padStart(2, '0');
+  })();
   await ensureWorksheet(driveId, itemId, sheetName, token);
 
   const allRows: (string | number)[][] = [];
+  let currentRow = 1;
   for (const file of markdownFiles) {
-    allRows.push(...markdownToRows(file.content, file.status));
+    const sectionRows = markdownToRows(file.content, currentRow);
+    allRows.push(...sectionRows);
+    currentRow += sectionRows.length;
   }
 
   await writeWorksheet(driveId, itemId, sheetName, allRows, token);

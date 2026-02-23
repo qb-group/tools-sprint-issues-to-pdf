@@ -15,6 +15,38 @@ export interface MarkdownResult {
   filepath: string;
   content: string;
   status: string;
+  sheetName: string;
+}
+
+/**
+ * Determine Excel worksheet name from sprint data.
+ * Priority:
+ *   1. First issue title matching "Sprint ~YYMMDD"
+ *   2. First issue's iteration field named "Sprint" with title containing YYMMDD
+ *   3. Today's date as YYMMDD
+ */
+function extractSheetName(items: any[]): string {
+  const firstIssue = items.find((item) => item.content?.url);
+  if (firstIssue) {
+    // Option 1: title "Sprint ~YYMMDD"
+    const titleMatch = (firstIssue.content?.title ?? '').match(/Sprint\s*~\s*(\d{6})/i);
+    if (titleMatch) return titleMatch[1];
+
+    // Option 2: iteration field named "Sprint" with title containing YYMMDD
+    for (const node of firstIssue.fieldValues?.nodes ?? []) {
+      if (/sprint/i.test(node.field?.name ?? '') && node.title) {
+        const iterMatch = (node.title as string).match(/Sprint[:\s~]+(\d{6})/i);
+        if (iterMatch) return iterMatch[1];
+      }
+    }
+  }
+
+  // Option 3: today YYMMDD
+  const today = new Date();
+  const yy = String(today.getFullYear()).slice(2);
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  return `${yy}${mm}${dd}`;
 }
 
 /**
@@ -35,6 +67,8 @@ export const generateMarkdown = async (
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
+  const sheetName = extractSheetName(items);
+
   // Group items by status
   const itemsByStatus = _.groupBy(items, (item) => item.fieldValueByName?.name);
 
@@ -43,16 +77,15 @@ export const generateMarkdown = async (
     const statusItems = itemsByStatus[status] || [];
     const markdown = generateMarkdownTable(statusItems);
 
-    // Generate filename matching PDF naming convention
-    const currentDate = new Date().toISOString().split('T')[0]; // yyyy-MM-dd
+    // Generate filename: use sprint date (YYMMDD) from sheetName
     const sanitizedStatus = status.replace(/\s+/g, '_');
     const sanitizedTitle = projectInfo.title.replace(/\s+/g, '_');
-    const filename = `${sanitizedTitle}_${sanitizedStatus}_${currentDate}.md`;
+    const filename = `${sanitizedTitle}_${sanitizedStatus}_${sheetName}.md`;
     const filepath = path.join(outputDir, filename);
 
     // Write to file
     fs.writeFileSync(filepath, markdown, 'utf-8');
-    results.push({ filepath, content: markdown, status });
+    results.push({ filepath, content: markdown, status, sheetName });
   }
 
   return results;

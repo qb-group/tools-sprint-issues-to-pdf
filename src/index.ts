@@ -61,19 +61,19 @@ import { uploadToOneDriveExcel } from './onedrive';
       consola.info(`  ${item.filepath}`);
     }
 
-    if (process.env.ONDRIVE_FILE_LINK) {
-      if (!process.env.AZURE_CLIENT_ID) {
-        consola.warn('AZURE_CLIENT_ID not set — skipping OneDrive upload');
-      } else {
-        spinner.start('Uploading to OneDrive Excel');
-        try {
-          const sheetName = await uploadToOneDriveExcel(markdownResults);
-          spinner.succeed('Uploaded to OneDrive Excel!');
-          consola.info(`  Sheet: ${sheetName}`);
-        } catch (err: any) {
-          spinner.fail('OneDrive upload failed');
-          consola.error(err.message);
-        }
+    if (!process.env.ONDRIVE_FILE_LINK) {
+      consola.info('ONDRIVE_FILE_LINK not set — skipping OneDrive Excel upload');
+    } else if (!process.env.AZURE_CLIENT_SECRET) {
+      consola.warn('AZURE_CLIENT_SECRET not set — skipping OneDrive Excel upload');
+    } else {
+      spinner.start('Uploading to OneDrive Excel');
+      try {
+        const sheetName = await uploadToOneDriveExcel(markdownResults);
+        spinner.succeed('Uploaded to OneDrive Excel!');
+        consola.info(`  Sheet: ${sheetName}`);
+      } catch (err: any) {
+        spinner.fail('OneDrive upload failed');
+        consola.error(err.message);
       }
     }
   }
