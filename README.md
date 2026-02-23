@@ -125,14 +125,22 @@
     - Generating outputs
     ✔ Generated outputs!
     ℹ PDF files:
-    ℹ   output/My_Project_In_Progress_2024-01-15.pdf
+    ℹ   output/My_Project_In_Progress_240115.pdf
     ℹ Markdown files:
-    ℹ   output/My_Project_In_Progress_2024-01-15.md
+    ℹ   output/My_Project_In_Progress_240115.md
+    - Uploading to OneDrive Excel     (ONDRIVE_FILE_LINK 설정 시)
+    ✔ Uploaded to OneDrive Excel!
+    ℹ   Sheet: 240115
   ```
 
-  **생성되는 파일**:
-  - `output/{프로젝트명}_{상태}_{날짜}.pdf` - 이슈 상세 PDF
-  - `output/{프로젝트명}_{상태}_{날짜}.md` - 스프린트 현황 마크다운 테이블
+  **생성되는 파일** (날짜는 `YYMMDD` 형식):
+  - `output/{프로젝트명}_{상태}_{YYMMDD}.pdf` - 이슈 상세 PDF
+  - `output/{프로젝트명}_{상태}_{YYMMDD}.md` - 스프린트 현황 마크다운 테이블
+
+  **YYMMDD 날짜 결정 우선순위**:
+  1. 첫 번째 이슈 제목의 `Sprint ~YYMMDD` 패턴
+  2. 첫 번째 이슈의 iteration 필드(`Sprint`)에서 추출
+  3. 오늘 날짜
 
 ### Markdown Output Format
 

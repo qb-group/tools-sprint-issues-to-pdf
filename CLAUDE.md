@@ -38,6 +38,12 @@ GITHUB_ORG=your-org-name
 GITHUB_PROJECT_ID=3            # Project number (from URL)
 GITHUB_PROJECT_STATUS=Planning  # Single status: "Planning" or multiple: "Planning,In Progress,Done"
 SKIP_PROMPT=true               # Optional: skip confirmation prompt
+
+# OneDrive Excel upload (optional)
+AZURE_TENANT_ID=xxxx           # Azure AD tenant ID
+AZURE_CLIENT_ID=xxxx           # Azure app client ID
+AZURE_CLIENT_SECRET=xxxx       # Azure app client secret
+ONDRIVE_FILE_LINK=https://...  # SharePoint Excel file share link
 ```
 
 **Token permissions required:**
@@ -94,16 +100,29 @@ SKIP_PROMPT=true               # Optional: skip confirmation prompt
 ### src/markdown.ts
 - `generateMarkdown()`: Orchestrates markdown generation per status column
 - `generateMarkdownTable()`: Formats markdown table with category tracking
+- `extractSheetName()`: Determines YYMMDD date from items (sprint title → iteration field → today)
 - Category detection from DraftIssue titles: "이하 스프린트 연속" → "연속", etc.
-- Outputs: `output/{title}_{status}_{date}.md`
+- Outputs: `output/{title}_{status}_{YYMMDD}.md`
 - Number formatting: integers show as `1.0`, decimals as `1.5`
+- `MarkdownResult` includes `sheetName: string` (YYMMDD) used by onedrive.ts
 
 ### src/pdf.ts
-- PDF generation from issue data (unchanged)
+- PDF generation from issue data
+- `extractDateCode()`: Same YYMMDD priority logic as `extractSheetName()` using `GITHUB_ISSUE[]`
+- Outputs: `output/{title}_{status}_{YYMMDD}.pdf`
+
+### src/onedrive.ts
+- `uploadToOneDriveExcel()`: Main export — uploads markdown results to SharePoint Excel
+- Auth: `ClientSecretCredential` (Client Credentials Flow, no browser login)
+- `resolveShareLink()`: SharePoint share URL → Graph API `driveId` + `itemId`
+- `ensureWorksheet()`: Creates worksheet if it doesn't exist (name = YYMMDD from `sheetName`)
+- `markdownToRows()`: Parses markdown table → `(string|number)[][]`; issue cells become `=HYPERLINK()` formulas; Total row replaced with `=SUM()` formulas
+- `writeWorksheet()`: Clears range then writes via `PATCH range/formulas`
 
 ### src/index.ts
 - Parallel execution: `Promise.all([getProjectIssues(), getProjectItemsForMarkdown()])`
 - Parallel output: `Promise.all([generatePdf(), generateMarkdown()])`
+- OneDrive upload: runs after outputs; skipped (with info log) if `ONDRIVE_FILE_LINK` not set; skipped (with warn) if `AZURE_CLIENT_SECRET` not set
 
 ## Testing
 
