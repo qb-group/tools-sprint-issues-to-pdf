@@ -5,6 +5,7 @@ import { GITHUB_PROJECT, getProjectIssues, getProjectInfo, getProjectItemsForMar
 // import GithubMockupJson from '../github-response-mockup/multiple-status-issues.json';
 import { generatePdf } from './pdf';
 import { generateMarkdown } from './markdown';
+import { uploadToOneDriveExcel } from './onedrive';
 
 (async () => {
 
@@ -57,7 +58,23 @@ import { generateMarkdown } from './markdown';
 
     consola.info('Markdown files:');
     for (const item of markdownResults) {
-      consola.info(`  ${item}`);
+      consola.info(`  ${item.filepath}`);
+    }
+
+    if (!process.env.ONDRIVE_FILE_LINK) {
+      consola.info('ONDRIVE_FILE_LINK not set — skipping OneDrive Excel upload');
+    } else if (!process.env.AZURE_CLIENT_SECRET) {
+      consola.warn('AZURE_CLIENT_SECRET not set — skipping OneDrive Excel upload');
+    } else {
+      spinner.start('Uploading to OneDrive Excel');
+      try {
+        const sheetName = await uploadToOneDriveExcel(markdownResults);
+        spinner.succeed('Uploaded to OneDrive Excel!');
+        consola.info(`  Sheet: ${sheetName}`);
+      } catch (err: any) {
+        spinner.fail('OneDrive upload failed');
+        consola.error(err.message);
+      }
     }
   }
 })();

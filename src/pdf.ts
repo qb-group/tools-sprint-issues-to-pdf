@@ -126,12 +126,36 @@ const generatePdfFromIssues = async (fileName: string, issues: GITHUB_ISSUE[]) =
 }
 
 
-export const generatePdf = async (projectInfo: GITHUB_PROJECT, issues: GITHUB_ISSUE[]): Promise<string[]> => { 
+function extractDateCode(issues: GITHUB_ISSUE[]): string {
+  const first = issues[0];
+  if (first) {
+    // Option 1: title "Sprint ~YYMMDD"
+    const titleMatch = (first.title ?? '').match(/Sprint\s*~\s*(\d{6})/i);
+    if (titleMatch) return titleMatch[1];
+
+    // Option 2: iteration field named "Sprint" with title containing YYMMDD
+    for (const iter of first.iterations ?? []) {
+      if (/sprint/i.test(iter.name)) {
+        const iterMatch = iter.title.match(/Sprint[:\s~]+(\d{6})/i);
+        if (iterMatch) return iterMatch[1];
+      }
+    }
+  }
+
+  // Option 3: today YYMMDD
+  const today = new Date();
+  return String(today.getFullYear()).slice(2) +
+    String(today.getMonth() + 1).padStart(2, '0') +
+    String(today.getDate()).padStart(2, '0');
+}
+
+export const generatePdf = async (projectInfo: GITHUB_PROJECT, issues: GITHUB_ISSUE[]): Promise<string[]> => {
+  const dateCode = extractDateCode(issues);
   const statusGroup: any = _.groupBy(issues, (issue) => issue.status);
   let results: string[] = [];
 
   for (var key in statusGroup){
-    const fileName = `${projectInfo.title}_${key}_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+    const fileName = `${projectInfo.title}_${key}_${dateCode}.pdf`;
     results.push(await generatePdfFromIssues(fileName, statusGroup[key]));
   }
   return results;

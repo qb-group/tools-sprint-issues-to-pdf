@@ -6,6 +6,7 @@
 - 📝 **Markdown 테이블**: 스프린트 현황을 한눈에 볼 수 있는 마크다운 테이블
 - ⚡ **최적화된 성능**: 단일 GraphQL 쿼리로 데이터를 가져와 병렬 처리
 - 🎯 **카테고리 분류**: DraftIssue를 활용한 자동 카테고리 구분 (연속/신규/부채)
+- ☁️ **OneDrive Excel 업로드** (선택): Markdown 결과를 SharePoint Excel 시트에 자동 업로드
 
 
 ### Prerequisites
@@ -76,6 +77,25 @@
       - `BE` (Number): 백엔드 작업량
       - `Desc` (Text): 추가 설명
 
+  - OneDrive Excel 업로드 설정 (선택)
+  ```yml
+  AZURE_TENANT_ID={Azure 테넌트 ID}
+  AZURE_CLIENT_ID={Azure 앱 클라이언트 ID}
+  AZURE_CLIENT_SECRET={Azure 앱 클라이언트 시크릿}
+  ONDRIVE_FILE_LINK={SharePoint Excel 파일 공유 링크}
+  ```
+
+    * **Azure 앱 등록 방법**:
+      1. [Azure Portal](https://portal.azure.com) → Azure Active Directory → 앱 등록 → 새 등록
+      2. API 권한 추가: `Microsoft Graph` → `Files.ReadWrite.All` (Application), `Sites.ReadWrite.All` (Application)
+      3. 관리자 동의(Grant admin consent) 클릭
+      4. 인증서 및 암호 → 클라이언트 암호 생성 → `AZURE_CLIENT_SECRET`에 설정
+
+    * **Excel 공유 링크 얻기**:
+      - SharePoint에서 Excel 파일 열기 → 공유 → 링크 복사 → `ONDRIVE_FILE_LINK`에 설정
+
+    * `ONDRIVE_FILE_LINK`가 설정되지 않으면 업로드를 건너뛰고 계속 진행합니다
+
 - Installation
   ```bash
   $ pnpm install
@@ -105,14 +125,22 @@
     - Generating outputs
     ✔ Generated outputs!
     ℹ PDF files:
-    ℹ   output/My_Project_In_Progress_2024-01-15.pdf
+    ℹ   output/My_Project_In_Progress_240115.pdf
     ℹ Markdown files:
-    ℹ   output/My_Project_In_Progress_2024-01-15.md
+    ℹ   output/My_Project_In_Progress_240115.md
+    - Uploading to OneDrive Excel     (ONDRIVE_FILE_LINK 설정 시)
+    ✔ Uploaded to OneDrive Excel!
+    ℹ   Sheet: 240115
   ```
 
-  **생성되는 파일**:
-  - `output/{프로젝트명}_{상태}_{날짜}.pdf` - 이슈 상세 PDF
-  - `output/{프로젝트명}_{상태}_{날짜}.md` - 스프린트 현황 마크다운 테이블
+  **생성되는 파일** (날짜는 `YYMMDD` 형식):
+  - `output/{프로젝트명}_{상태}_{YYMMDD}.pdf` - 이슈 상세 PDF
+  - `output/{프로젝트명}_{상태}_{YYMMDD}.md` - 스프린트 현황 마크다운 테이블
+
+  **YYMMDD 날짜 결정 우선순위**:
+  1. 첫 번째 이슈 제목의 `Sprint ~YYMMDD` 패턴
+  2. 첫 번째 이슈의 iteration 필드(`Sprint`)에서 추출
+  3. 오늘 날짜
 
 ### Markdown Output Format
 
