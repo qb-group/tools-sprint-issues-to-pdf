@@ -3,14 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { GITHUB_PROJECT } from './github';
 
-interface MarkdownItem {
-  title: string;
-  url: string | null;
-  fe: number | null;
-  be: number | null;
-  desc: string | null;
-}
-
 export interface MarkdownResult {
   filepath: string;
   content: string;
@@ -92,6 +84,21 @@ export const generateMarkdown = async (
 };
 
 /**
+ * Collect unique number field names from all items (preserving first-appearance order)
+ */
+const collectNumberFieldNames = (items: any[]): string[] => {
+  const names: string[] = [];
+  for (const item of items) {
+    for (const node of item.fieldValues?.nodes ?? []) {
+      if (_.isNumber(node.number) && node.field?.name && !names.includes(node.field.name)) {
+        names.push(node.field.name);
+      }
+    }
+  }
+  return names;
+};
+
+/**
  * Generate markdown table from items
  * @param items project items for a specific status
  * @returns markdown string
@@ -99,23 +106,35 @@ export const generateMarkdown = async (
 const generateMarkdownTable = (items: any[]): string => {
   const lines: string[] = [];
 
+  // Discover number fields dynamically
+  const numberFields = collectNumberFieldNames(items);
+
   // Table header
-  lines.push('| # | 구분 | 이슈 | FE | BE | Desc |');
-  lines.push('|---|------|------|:--:|:--:|------|');
+  const numHeaders = numberFields.map((name) => `| ${name} `).join('');
+  const numSeps = numberFields.map(() => `|:--:`).join('');
+  lines.push(`| # | 구분 | 이슈 ${numHeaders}| Desc |`);
+  lines.push(`|---|------|------${numSeps}|------|`);
 
   // Category tracking
   let category = '';
   let count = 0;
-  let feTotal = 0;
-  let beTotal = 0;
+  const totals: Record<string, number> = {};
+  numberFields.forEach((name) => { totals[name] = 0; });
 
   // Process each item
   for (const item of items) {
     const title = item.content?.title || '';
     const url = item.content?.url || null;
-    const fe = item.fe?.number ?? null;
-    const be = item.be?.number ?? null;
     const desc = item.desc?.text ?? null;
+
+    // Build number values map for this item
+    const numValues: Record<string, number | null> = {};
+    numberFields.forEach((name) => { numValues[name] = null; });
+    for (const node of item.fieldValues?.nodes ?? []) {
+      if (_.isNumber(node.number) && node.field?.name && Object.prototype.hasOwnProperty.call(numValues, node.field.name)) {
+        numValues[node.field.name] = node.number;
+      }
+    }
 
     // Check for category separators (DraftIssues with special titles)
     if (title.includes('이하 스프린트 연속')) {
@@ -138,20 +157,25 @@ const generateMarkdownTable = (items: any[]): string => {
     count++;
 
     // Add to totals
-    feTotal += fe ?? 0;
-    beTotal += be ?? 0;
+    numberFields.forEach((name) => { totals[name] += numValues[name] ?? 0; });
 
     // Format values (null -> "-", numbers with .0 for integers)
-    const feDisplay = fe !== null ? (Number.isInteger(fe) ? `${fe}.0` : fe.toString()) : '-';
-    const beDisplay = be !== null ? (Number.isInteger(be) ? `${be}.0` : be.toString()) : '-';
+    const numCells = numberFields
+      .map((name) => {
+        const val = numValues[name];
+        const display = val !== null ? (Number.isInteger(val) ? `${val}.0` : val.toString()) : '-';
+        return `| ${display} `;
+      })
+      .join('');
     const descDisplay = desc !== null ? desc : '-';
 
     // Add table row
-    lines.push(`| ${count} | ${category} | [${title}](${url}) | ${feDisplay} | ${beDisplay} | ${descDisplay} |`);
+    lines.push(`| ${count} | ${category} | [${title}](${url}) ${numCells}| ${descDisplay} |`);
   }
 
   // Add total row
-  lines.push(`| | **Total** | | **${feTotal}** | **${beTotal}** | |`);
+  const totalCells = numberFields.map((name) => `| **${totals[name]}** `).join('');
+  lines.push(`| | **Total** | ${totalCells}| |`);
 
   return lines.join('\n') + '\n';
 };
