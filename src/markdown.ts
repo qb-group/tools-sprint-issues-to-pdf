@@ -146,6 +146,9 @@ const generateMarkdownTable = (items: any[]): string => {
     } else if (title.includes('이하 기술 부채')) {
       category = '부채';
       continue;
+    } else if (title.includes('이하 SPEC&PLAN')) {
+      category = '기획';
+      continue;
     }
 
     // Skip DraftIssues (separators) - they don't have URLs
