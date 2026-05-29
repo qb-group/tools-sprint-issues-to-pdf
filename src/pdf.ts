@@ -126,18 +126,38 @@ const generatePdfFromIssues = async (fileName: string, issues: GITHUB_ISSUE[]) =
 }
 
 
+/** Throws if the YYMMDD code refers to a date strictly before today. */
+function assertNotPast(yymmdd: string): void {
+  const yy = parseInt(yymmdd.slice(0, 2), 10);
+  const mm = parseInt(yymmdd.slice(2, 4), 10) - 1;
+  const dd = parseInt(yymmdd.slice(4, 6), 10);
+  const sprintDate = new Date(2000 + yy, mm, dd);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (sprintDate < today) {
+    const fmt = `20${yymmdd.slice(0, 2)}-${yymmdd.slice(2, 4)}-${yymmdd.slice(4, 6)}`;
+    throw new Error(`스프린트 날짜(${fmt})가 오늘(${today.toISOString().slice(0, 10)})보다 과거입니다. 다음 스프린트 날짜를 확인해 주세요.`);
+  }
+}
+
 function extractDateCode(issues: GITHUB_ISSUE[]): string {
   const first = issues[0];
   if (first) {
     // Option 1: title "Sprint ~YYMMDD"
     const titleMatch = (first.title ?? '').match(/Sprint\s*~\s*(\d{6})/i);
-    if (titleMatch) return titleMatch[1];
+    if (titleMatch) {
+      assertNotPast(titleMatch[1]);
+      return titleMatch[1];
+    }
 
     // Option 2: iteration field named "Sprint" with title containing YYMMDD
     for (const iter of first.iterations ?? []) {
       if (/sprint/i.test(iter.name)) {
         const iterMatch = iter.title.match(/Sprint[:\s~]+(\d{6})/i);
-        if (iterMatch) return iterMatch[1];
+        if (iterMatch) {
+          assertNotPast(iterMatch[1]);
+          return iterMatch[1];
+        }
       }
     }
   }

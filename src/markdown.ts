@@ -16,19 +16,26 @@ export interface MarkdownResult {
  *   1. First issue title matching "Sprint ~YYMMDD"
  *   2. First issue's iteration field named "Sprint" with title containing YYMMDD
  *   3. Today's date as YYMMDD
+ * Throws if the extracted sprint date is in the past.
  */
 function extractSheetName(items: any[]): string {
   const firstIssue = items.find((item) => item.content?.url);
   if (firstIssue) {
     // Option 1: title "Sprint ~YYMMDD"
     const titleMatch = (firstIssue.content?.title ?? '').match(/Sprint\s*~\s*(\d{6})/i);
-    if (titleMatch) return titleMatch[1];
+    if (titleMatch) {
+      assertNotPast(titleMatch[1]);
+      return titleMatch[1];
+    }
 
     // Option 2: iteration field named "Sprint" with title containing YYMMDD
     for (const node of firstIssue.fieldValues?.nodes ?? []) {
       if (/sprint/i.test(node.field?.name ?? '') && node.title) {
         const iterMatch = (node.title as string).match(/Sprint[:\s~]+(\d{6})/i);
-        if (iterMatch) return iterMatch[1];
+        if (iterMatch) {
+          assertNotPast(iterMatch[1]);
+          return iterMatch[1];
+        }
       }
     }
   }
@@ -39,6 +46,20 @@ function extractSheetName(items: any[]): string {
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
   return `${yy}${mm}${dd}`;
+}
+
+/** Throws if the YYMMDD code refers to a date strictly before today. */
+function assertNotPast(yymmdd: string): void {
+  const yy = parseInt(yymmdd.slice(0, 2), 10);
+  const mm = parseInt(yymmdd.slice(2, 4), 10) - 1;
+  const dd = parseInt(yymmdd.slice(4, 6), 10);
+  const sprintDate = new Date(2000 + yy, mm, dd);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (sprintDate < today) {
+    const fmt = `20${yymmdd.slice(0, 2)}-${yymmdd.slice(2, 4)}-${yymmdd.slice(4, 6)}`;
+    throw new Error(`스프린트 날짜(${fmt})가 오늘(${today.toISOString().slice(0, 10)})보다 과거입니다. 다음 스프린트 날짜를 확인해 주세요.`);
+  }
 }
 
 /**
@@ -148,6 +169,9 @@ const generateMarkdownTable = (items: any[]): string => {
       continue;
     } else if (title.includes('이하 SPEC&PLAN')) {
       category = '기획';
+      continue;
+    } else if (title.includes('이하 opt')) {
+      category = '선택';
       continue;
     }
 
