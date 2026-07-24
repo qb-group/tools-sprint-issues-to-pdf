@@ -86,9 +86,9 @@
   ```
 
     * **Azure 앱 등록 방법**:
-      1. [Azure Portal](https://portal.azure.com) → Azure Active Directory → 앱 등록 → 새 등록
+      1. [Azure Portal](https://portal.azure.com) → Microsoft Entra ID → 앱 등록 → 새 등록
       2. API 권한 추가: `Microsoft Graph` → `Files.ReadWrite.All` (Application), `Sites.ReadWrite.All` (Application)
-      3. 관리자 동의(Grant admin consent) 클릭
+      3. 상단의 관리자 동의(Grant admin consent) 클릭
       4. 인증서 및 암호 → 클라이언트 암호 생성 → `AZURE_CLIENT_SECRET`에 설정
 
     * **Excel 공유 링크 얻기**:
