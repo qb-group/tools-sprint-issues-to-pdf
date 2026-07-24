@@ -11,6 +11,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=22"
+  },
   "devDependencies": {
     "@types/lodash": "4.14.191",
     "@types/node": "18.15.0",
